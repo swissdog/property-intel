@@ -77,7 +77,7 @@ async def market_velocity(
 @router.get("/export/backup")
 async def export_backup(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
-    format: str = Query("csv", regex="^(csv|json)$"),
+    format: str = Query("csv", pattern="^(csv|json)$"),
 ) -> StreamingResponse:
     """Full database export for JARVIS backup (cloud -> local, one-way).
 

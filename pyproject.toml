@@ -3,7 +3,7 @@ name = "jarvis-property-intel"
 version = "0.1.0"
 description = "JARVIS v2 property intelligence module — Finnish real-estate data"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "swissdog" }]
 license = { text = "Proprietary" }
 dependencies = [

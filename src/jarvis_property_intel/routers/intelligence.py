@@ -59,7 +59,7 @@ def _get_verify():
 async def investor_lens(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
     municipality_code: str | None = Query(None, max_length=10),
     min_yield_pct: float | None = Query(None, ge=0, le=50),
     max_price_m2: float | None = Query(None, ge=0),
@@ -113,7 +113,7 @@ async def yield_anomalies(
 async def market_velocity_extended(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
     quarters_back: int = Query(20, ge=1, le=80),
 ) -> list[dict[str, Any]]:
     """Quarterly listings, DOM, removed-vs-active per postal code."""
@@ -191,7 +191,7 @@ async def supply_demand(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
     region_code: str | None = Query(None, max_length=10),
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
 ) -> list[dict[str, Any]]:
     """Annual supply (dwellings completed) vs demand (net migration) per region.
 
@@ -288,8 +288,8 @@ async def interest_rates(
 async def rents(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
-    room_count_band: str | None = Query(None, regex=r"^(1h|2h|3h\+)$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
+    room_count_band: str | None = Query(None, pattern=r"^(1h|2h|3h\+)$"),
     from_year: int | None = Query(None, ge=2015, le=2030),
     limit: int = Query(2000, ge=1, le=20000),
 ) -> list[dict[str, Any]]:
@@ -357,7 +357,7 @@ async def construction(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
     region_code: str | None = Query(None, max_length=10),
-    phase: str | None = Query(None, regex=r"^(permit|start|completion)$"),
+    phase: str | None = Query(None, pattern=r"^(permit|start|completion)$"),
     building_class_code: str | None = Query(None, max_length=10),
     from_year: int | None = Query(None, ge=1995, le=2030),
     limit: int = Query(5000, ge=1, le=50000),
@@ -401,7 +401,7 @@ async def construction(
 async def demographics(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
     municipality_code: str | None = Query(None, max_length=10),
     min_population: int | None = Query(None, ge=0),
     limit: int = Query(500, ge=1, le=5000),
@@ -480,8 +480,8 @@ async def mortgage_market(
 async def flood_risk(
     auth: Annotated[ModuleAuth, Depends(_get_verify())],
     session: Annotated[AsyncSession, Depends(get_session)],
-    postal_code: str | None = Query(None, regex=r"^\d{5}$"),
-    scenario: str | None = Query(None, regex=r"^(100y|250y|significant)$"),
+    postal_code: str | None = Query(None, pattern=r"^\d{5}$"),
+    scenario: str | None = Query(None, pattern=r"^(100y|250y|significant)$"),
     limit: int = Query(1000, ge=1, le=10000),
 ) -> list[dict[str, Any]]:
     """Per postal-code flood-risk overlap (SYKE INSPIRE flood maps).
