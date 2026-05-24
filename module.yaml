@@ -1,0 +1,140 @@
+# JARVIS module manifest — property_intel (kontrakti v1.0.0)
+name: property_intel
+version: 0.1.0
+base_url: http://localhost:8031
+contract_version: "1.0.0"
+
+routes:
+  - path: "/api/v1/property_intel/properties/*"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/areas/*"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/transactions"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/transactions/stats"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/price-gap"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/velocity"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/export/backup"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/intel/*"
+    methods: ["GET"]
+
+chat_tools:
+  - name: property_intel.search_listings
+    description: "Hae aktiivisia myynti-ilmoituksia postinumeron, kaupungin tai koordinaattien perusteella"
+    endpoint: "/api/v1/property_intel/properties/search"
+    schema:
+      type: object
+      properties:
+        postal_code:
+          type: string
+        municipality:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        radius_km:
+          type: number
+          default: 5.0
+        limit:
+          type: integer
+          default: 20
+
+  - name: property_intel.investor_lens
+    description: "Postinumerotason sijoittajanäkymä: tuotto-%, hinta/m2, vuokra, 5v-kasvu"
+    endpoint: "/api/v1/property_intel/intel/investor-lens"
+    schema:
+      type: object
+      properties:
+        postal_code:
+          type: string
+        municipality_code:
+          type: string
+        min_yield_pct:
+          type: number
+        max_price_m2:
+          type: number
+
+  - name: property_intel.area_market
+    description: "Alueen markkinakatsaus: mediaanihinta, DOM, varastotilanne"
+    endpoint: "/api/v1/property_intel/areas/market"
+    schema:
+      type: object
+      required: ["postal_code"]
+      properties:
+        postal_code:
+          type: string
+
+  - name: property_intel.property_valuation
+    description: "Kiinteistön arviointi: matala/reilu/korkea arvio luottamuspisteellä"
+    endpoint: "/api/v1/property_intel/properties/valuation"
+    schema:
+      type: object
+      required: ["asset_id"]
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+
+  - name: property_intel.rates
+    description: "ECB/Euribor-korot ja BoF-asuntolainamarkkinadata"
+    endpoint: "/api/v1/property_intel/intel/rates"
+    schema:
+      type: object
+      properties:
+        rate_type:
+          type: string
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+
+  - name: property_intel.flood_risk
+    description: "Postinumerotason tulvariskianalyysi (SYKE)"
+    endpoint: "/api/v1/property_intel/intel/flood-risk"
+    schema:
+      type: object
+      properties:
+        postal_code:
+          type: string
+        scenario:
+          type: string
+          enum: ["100y", "250y", "significant"]
+
+  - name: property_intel.demographics
+    description: "Postinumerotason demografiaprofiili (Paavo): väestö, tulot, koulutus, asuntokanta"
+    endpoint: "/api/v1/property_intel/intel/demographics"
+    schema:
+      type: object
+      properties:
+        postal_code:
+          type: string
+
+  - name: property_intel.national_headline
+    description: "Kansalliset neljännesvuositilastot: hinta, vuokra, Euribor, tuotto, valmistuneet asunnot"
+    endpoint: "/api/v1/property_intel/intel/national-headline"
+    schema:
+      type: object
+      properties:
+        quarters_back:
+          type: integer
+          default: 24
+
+health:
+  path: /health
+  interval_seconds: 60
+  timeout_seconds: 5
+
+db_namespace: jarvis_property_intel
+auth_scopes:
+  - "property_intel:read"
+
+metadata:
+  repo: "https://github.com/swissdog/property-intel"
+  status: "active"
