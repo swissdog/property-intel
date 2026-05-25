@@ -1,0 +1,24 @@
+# property-intel oma PostGIS-tietokanta (JARVIS v2 external-agentti-malli).
+# postgis/postgis-image sisältää PostGIS:n jota jarvis-pg (alpine) ei tarjoa.
+# Portti 5438 (lego=5436, motu=5437, store-manager=5440).
+services:
+  property-intel-pg:
+    image: postgis/postgis:16-3.4
+    container_name: property-intel-pg
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5438:5432"
+    environment:
+      POSTGRES_DB: jarvis_property_intel
+      POSTGRES_USER: property_intel_user
+      POSTGRES_PASSWORD: "5224460720b04e7aeea412cb6e8af21337905163b44177c3"
+    volumes:
+      - property_intel_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "property_intel_user", "-d", "jarvis_property_intel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  property_intel_pg_data:

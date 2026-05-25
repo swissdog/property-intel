@@ -8,8 +8,8 @@ Wants=network-online.target
 Type=simple
 User=sami
 Group=sami
-WorkingDirectory=/home/sami/code/property-intel
-EnvironmentFile=-/home/sami/code/property-intel/.env
+WorkingDirectory=/home/sami/property-intel
+EnvironmentFile=-/home/sami/property-intel/.env
 ExecStart=/home/sami/.local/bin/uv run --no-sync uvicorn jarvis_property_intel.main:app --host 0.0.0.0 --port 8031
 
 Restart=on-failure
