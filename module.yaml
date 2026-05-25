@@ -1,8 +1,8 @@
-# JARVIS module manifest — property_intel (kontrakti v1.0.0)
+# JARVIS module manifest — property_intel (kontrakti v1.1.0)
 name: property_intel
 version: 0.1.0
 base_url: http://localhost:8031
-contract_version: "1.0.0"
+contract_version: "1.1.0"
 
 routes:
   - path: "/api/v1/property_intel/properties/*"
@@ -25,6 +25,7 @@ routes:
 chat_tools:
   - name: property_intel.search_listings
     description: "Hae aktiivisia myynti-ilmoituksia postinumeron, kaupungin tai koordinaattien perusteella"
+    method: GET
     endpoint: "/api/v1/property_intel/properties/search"
     schema:
       type: object
@@ -46,6 +47,7 @@ chat_tools:
 
   - name: property_intel.investor_lens
     description: "Postinumerotason sijoittajanäkymä: tuotto-%, hinta/m2, vuokra, 5v-kasvu"
+    method: GET
     endpoint: "/api/v1/property_intel/intel/investor-lens"
     schema:
       type: object
@@ -61,6 +63,7 @@ chat_tools:
 
   - name: property_intel.area_market
     description: "Alueen markkinakatsaus: mediaanihinta, DOM, varastotilanne"
+    method: GET
     endpoint: "/api/v1/property_intel/areas/market"
     schema:
       type: object
@@ -71,6 +74,7 @@ chat_tools:
 
   - name: property_intel.property_valuation
     description: "Kiinteistön arviointi: matala/reilu/korkea arvio luottamuspisteellä"
+    method: GET
     endpoint: "/api/v1/property_intel/properties/valuation"
     schema:
       type: object
@@ -82,6 +86,7 @@ chat_tools:
 
   - name: property_intel.rates
     description: "ECB/Euribor-korot ja BoF-asuntolainamarkkinadata"
+    method: GET
     endpoint: "/api/v1/property_intel/intel/rates"
     schema:
       type: object
@@ -97,6 +102,7 @@ chat_tools:
 
   - name: property_intel.flood_risk
     description: "Postinumerotason tulvariskianalyysi (SYKE)"
+    method: GET
     endpoint: "/api/v1/property_intel/intel/flood-risk"
     schema:
       type: object
@@ -109,6 +115,7 @@ chat_tools:
 
   - name: property_intel.demographics
     description: "Postinumerotason demografiaprofiili (Paavo): väestö, tulot, koulutus, asuntokanta"
+    method: GET
     endpoint: "/api/v1/property_intel/intel/demographics"
     schema:
       type: object
@@ -118,6 +125,7 @@ chat_tools:
 
   - name: property_intel.national_headline
     description: "Kansalliset neljännesvuositilastot: hinta, vuokra, Euribor, tuotto, valmistuneet asunnot"
+    method: GET
     endpoint: "/api/v1/property_intel/intel/national-headline"
     schema:
       type: object
