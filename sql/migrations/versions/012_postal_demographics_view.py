@@ -26,13 +26,9 @@ depends_on = None
 
 def _execute_sql_file(filename: str) -> None:
     sql_path = Path(__file__).resolve().parent.parent / "sql" / filename
-    text = sql_path.read_text()
-    # Split on `;` at end of line — asyncpg cannot prepare multi-statement strings.
-    # Naive split is safe here because our view DDL never contains string
-    # literals or function bodies that include semicolons.
-    statements = [s.strip() for s in text.split(";") if s.strip()]
-    for stmt in statements:
-        op.execute(stmt)
+    # Sync-psycopg ajaa moni-lausekkeisen tiedoston suoraan (ei naive
+    # split(";"):iä, joka rikkoi kommenttien sisäiset puolipisteet).
+    op.execute(sql_path.read_text())
 
 
 def upgrade() -> None:

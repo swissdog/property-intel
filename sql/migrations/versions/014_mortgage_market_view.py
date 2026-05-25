@@ -26,9 +26,9 @@ depends_on = None
 
 def upgrade() -> None:
     sql_path = Path(__file__).resolve().parent.parent / "sql" / "014_mortgage_market.sql"
-    statements = [s.strip() for s in sql_path.read_text().split(";") if s.strip()]
-    for stmt in statements:
-        op.execute(stmt)
+    # Sync-psycopg ajaa moni-lausekkeisen tiedoston suoraan (ei naive
+    # puolipiste-splittia joka rikkoi kommenttien sisaiset puolipisteet).
+    op.execute(sql_path.read_text())
 
 
 def downgrade() -> None:

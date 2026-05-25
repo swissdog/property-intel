@@ -18,7 +18,9 @@ from alembic import op
 
 
 revision = "009_analytical_views"
-down_revision = "008_migration_activity"
+# Reorder (fresh-init-korjaus): 010_municipality_region ajetaan ennen 009:ää,
+# koska 009:n analytiikkanäkymät viittaavat property.municipality_region-tauluun.
+down_revision = "010_municipality_region"
 branch_labels = None
 depends_on = None
 

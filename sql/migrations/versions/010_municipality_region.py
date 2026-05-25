@@ -17,7 +17,9 @@ import sqlalchemy as sa
 
 
 revision = "010_municipality_region"
-down_revision = "009_analytical_views"
+# Reorder (fresh-init-korjaus): siirretty 009:n eteen (009:n näkymät tarvitsevat
+# tämän taulun). Ketju: 008 → 010 → 009 → 011.
+down_revision = "008_migration_activity"
 branch_labels = None
 depends_on = None
 

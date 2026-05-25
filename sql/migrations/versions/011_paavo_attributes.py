@@ -19,7 +19,8 @@ import sqlalchemy as sa
 
 
 revision = "011_paavo_attributes"
-down_revision = "010_municipality_region"
+# Reorder (fresh-init-korjaus): 010 ja 009 vaihtoivat paikkaa → 011 seuraa 009:ää.
+down_revision = "009_analytical_views"
 branch_labels = None
 depends_on = None
 

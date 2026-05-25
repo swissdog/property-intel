@@ -21,6 +21,7 @@ dependencies = [
     "geoalchemy2>=0.15",
     "python-dotenv>=1.0",
     "jarvis-module-sdk[fastapi]",
+    "psycopg[binary]>=3.3.4",
 ]
 
 [project.optional-dependencies]

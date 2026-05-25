@@ -77,8 +77,26 @@ def upgrade() -> None:
         schema=SCHEMA,
     )
 
-    # Backfill first_seen_at from fetched_at for existing rows
-    op.execute(f"UPDATE {SCHEMA}.transaction SET first_seen_at = fetched_at WHERE first_seen_at IS NULL")
+    # Backfill first_seen_at from fetched_at for existing rows.
+    # Guard: fetched_at on legacy-sarake jota tuoreessa DB:ssä ei ole → skip
+    # (tuore taulu on tyhjä, joten backfillilla ei ole vaikutusta). Tekee
+    # migraatiosta sekä fresh- että legacy-turvallisen.
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = '{SCHEMA}' AND table_name = 'transaction'
+                  AND column_name = 'fetched_at'
+            ) THEN
+                UPDATE {SCHEMA}.transaction
+                   SET first_seen_at = fetched_at
+                 WHERE first_seen_at IS NULL;
+            END IF;
+        END $$;
+        """
+    )
 
 
 def downgrade() -> None:
