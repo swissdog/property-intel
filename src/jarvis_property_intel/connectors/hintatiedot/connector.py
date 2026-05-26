@@ -56,6 +56,7 @@ class _TableParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self._in_td = False
+        self._cell: str = ""
         self._current_row: list[str] = []
         self._rows: list[list[str]] = []
         self._section = ""
@@ -63,10 +64,16 @@ class _TableParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "td":
             self._in_td = True
+            self._cell = ""
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "td":
             self._in_td = False
+            # Append the cell EVEN IF empty. Aiemmin tyhjät <td>:t pudotettiin
+            # (`if text`), jolloin esim. tyhjä neighborhood-sarake siirsi KAIKKI
+            # seuraavat sarakkeet vasemmalle → building_type-sarakkeeseen valui
+            # pinta-ala, room_configiin tyyppikoodi jne. Säilytä sarakekohdistus.
+            self._current_row.append(self._cell.strip())
         elif tag == "tr":
             row = self._current_row
             self._current_row = []
@@ -74,10 +81,10 @@ class _TableParser(HTMLParser):
                 self._rows.append(row)
 
     def handle_data(self, data: str) -> None:
+        # Kerää yhden <td>:n kaikki datapätkät (myös sisäkkäiset tagit / <br>)
+        # yhdeksi soluksi — ei pilko yhtä solua useaksi sarakkeeksi.
         if self._in_td:
-            text = data.strip()
-            if text:
-                self._current_row.append(text)
+            self._cell += data
 
     @property
     def rows(self) -> list[list[str]]:

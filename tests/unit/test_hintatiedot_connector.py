@@ -2,7 +2,59 @@
 
 import pytest
 
-from jarvis_property_intel.connectors.hintatiedot.connector import HintatiedotConnector
+from jarvis_property_intel.connectors.hintatiedot.connector import (
+    HintatiedotConnector,
+    _TableParser,
+)
+
+
+class TestTableParser:
+    """HTML-taulun parsinta — sarakekohdistus (regressio: 2026-05-26 datakorruptio)."""
+
+    def test_empty_cell_preserved_no_shift(self):
+        """Tyhjä <td> (esim. neighborhood) EI saa pudota → ei sarakesiirtymää.
+
+        Aiempi bugi: tyhjät solut tiputettiin, jolloin koko rivi siirtyi
+        vasemmalle ja building_type-sarakkeeseen valui pinta-ala. 2224 riviä
+        korruptoitui näin ennen korjausta."""
+        html = (
+            "<table><tr>"
+            "<td></td>"          # tyhjä neighborhood
+            "<td>3h+k+s</td>"    # room_config
+            "<td>ok</td>"        # building_type (koodi)
+            "<td>153,00</td>"    # living_area_m2
+            "<td>450000</td>"    # debt_free_price
+            "<td>2941</td>"      # price_per_m2
+            "<td>1998</td>"      # year_built
+            "<td>1/2</td><td>ei</td><td>oma</td><td>D</td><td>C</td>"
+            "</tr></table>"
+        )
+        p = _TableParser()
+        p.feed(html)
+        assert len(p.rows) == 1
+        row = p.rows[0]
+        assert len(row) == 12
+        assert row[0] == ""          # neighborhood säilyy tyhjänä
+        assert row[1] == "3h+k+s"    # room_config oikeassa sarakkeessa
+        assert row[2] == "ok"        # building_type-koodi pysyy sarakkeessa 2
+        assert row[3] == "153,00"    # pinta-ala sarakkeessa 3
+
+    def test_multichunk_cell_stays_single_column(self):
+        """<td> jossa sisäkkäisiä tageja/<br> → yksi solu, ei monta saraketta."""
+        html = (
+            "<table><tr>"
+            "<td>Munkkiniemi</td>"
+            "<td>3h <b>+k</b> +s</td>"   # sisäkkäinen tagi
+            "<td>kt</td>"
+            "<td>75</td><td>350000</td><td>4667</td><td>1965</td>"
+            "<td>3/5</td><td>on</td><td>hyvä</td><td>oma</td><td>C</td>"
+            "</tr></table>"
+        )
+        p = _TableParser()
+        p.feed(html)
+        assert len(p.rows) == 1
+        assert len(p.rows[0]) == 12
+        assert p.rows[0][2] == "kt"   # building_type ei valunut väärään sarakkeeseen
 
 
 @pytest.fixture
