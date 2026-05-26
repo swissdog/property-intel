@@ -26,7 +26,22 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 # Ensure property-intel root is on path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_ROOT, "src"))
+
+# Load repo-root .env so scheduled/cron runs reach the REAL DB even when the
+# env var isn't exported. setdefault → never overrides an explicitly set var.
+# Without this the fallback below (a dev placeholder) silently pointed at the
+# wrong port/db and wrote 0 rows.
+_ENV_FILE = os.path.join(_ROOT, ".env")
+if os.path.exists(_ENV_FILE):
+    with open(_ENV_FILE, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
 DB_URL = os.getenv(
     "JARVIS_PROPERTY_INTEL_DATABASE_URL",
