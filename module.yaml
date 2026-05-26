@@ -64,7 +64,7 @@ chat_tools:
   - name: property_intel.area_market
     description: "Alueen markkinakatsaus: mediaanihinta, DOM, varastotilanne"
     method: GET
-    endpoint: "/api/v1/property_intel/areas/market"
+    endpoint: "/api/v1/property_intel/areas/{postal_code}/market"
     schema:
       type: object
       required: ["postal_code"]
@@ -75,7 +75,7 @@ chat_tools:
   - name: property_intel.property_valuation
     description: "Kiinteistön arviointi: matala/reilu/korkea arvio luottamuspisteellä"
     method: GET
-    endpoint: "/api/v1/property_intel/properties/valuation"
+    endpoint: "/api/v1/property_intel/properties/{asset_id}/valuation"
     schema:
       type: object
       required: ["asset_id"]
