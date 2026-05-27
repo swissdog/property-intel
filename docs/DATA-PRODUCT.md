@@ -248,7 +248,11 @@ WHERE source='oikotie' AND status='active' AND detail_fetched_at IS NULL;"
 
 - **PRH housing-company financials** — taloyhtiön taloustilanne; connector stub exists
 - **MML rakennusrekisteri** — authoritative build-year/usage/sqft cross-validation
-- **HSL/Digitraffic GTFS** — transit-access score per listing
+- ✅ **HSL GTFS transit-access score** (2026-05-27) — `building_features.transit_score_proxy`
+  (0-100 proxy: nearest-stop distance + 800 m stop density) for ~9.2k capital-region assets.
+  `scripts/fetch_transit_score.py` loads HSL stops into `transit_stop` and scores via PostGIS;
+  runs daily in `make fetch-all`. Scoped to HSL member municipalities (others NULL, honest).
+  *Open:* add Waltti/other-city feeds; frequency-weighted scoring (stop_times)
 - **Kunta open data** — school zones, services density, noise/air, plot zoning
 - **Tori.fi rents** — broader coverage of small markets where StatFi has thin data
 - **API key tiers + usage metering** — paid tiers, quotas, billing integration

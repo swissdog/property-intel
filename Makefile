@@ -2,8 +2,8 @@
 
 .PHONY: help setup-fresh fetch-rates fetch-rents fetch-construction \
         fetch-migration fetch-paavo-attributes fetch-bof-loans \
-        fetch-flood-risk fetch-all export pipeline-once test test-unit \
-        test-integration smoke-e2e stats api
+        fetch-flood-risk fetch-transit-score fetch-all export pipeline-once \
+        test test-unit test-integration smoke-e2e stats api
 
 UV ?= uv run python
 DB_URL ?= postgresql+asyncpg://property_intel_user:changeme@localhost:5435/jarvis_property_intel
@@ -55,7 +55,10 @@ fetch-bof-loans:                    ## Fetch BoF monthly housing-loan metrics
 fetch-flood-risk:                   ## Fetch SYKE flood-risk polygons
 	$(UV) scripts/fetch_flood_risk.py
 
-fetch-all: fetch-rates fetch-rents fetch-construction fetch-migration fetch-bof-loans  ## Run all fetchers
+fetch-transit-score:                ## Load GTFS stops + compute transit_score_proxy (HSL)
+	$(UV) scripts/fetch_transit_score.py
+
+fetch-all: fetch-rates fetch-rents fetch-construction fetch-migration fetch-bof-loans fetch-transit-score  ## Run all fetchers
 
 pipeline-once:                      ## Run hourly pipeline once
 	$(UV) scripts/hourly_pipeline.py
