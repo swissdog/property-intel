@@ -1,8 +1,25 @@
-"""Integration test: fetch real data from public APIs, write to DB, verify."""
+"""End-to-end smoke script: fetch real data from public APIs, write to DB, verify.
+
+This is NOT a pytest module — it is a sequential smoke runner with ordered steps
+that pass data between each other (StatFi/Paavo fetch → write → verify → query) and
+a single `asyncio.run(main())` event loop. It is intentionally named without a
+``test_`` prefix so pytest does not collect its steps as independent test functions
+(doing so breaks on the data-passing signature and shares one asyncpg engine across
+multiple event loops → "another operation is in progress").
+
+It hits LIVE external APIs (Tilastokeskus PxWeb, Paavo WFS) and WRITES test rows into
+whatever ``JARVIS_PROPERTY_INTEL_DATABASE_URL`` points at. Point it at a throwaway DB.
+
+Run:
+    JARVIS_PROPERTY_INTEL_DATABASE_URL=postgresql+asyncpg://.../jarvis_property_intel_test \\
+        uv run python tests/integration/smoke_e2e.py
+    # or: make smoke-e2e
+"""
 
 import asyncio
 import json
 import os
+import re
 import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -429,10 +446,31 @@ async def test_api_queries():
         print(f"  Area snapshots for 00100: {len(snapshots)} [{'PASS' if len(snapshots) > 0 else 'FAIL'}]")
 
 
+def _guard_target_db() -> None:
+    """Refuse to write test rows into a non-test DB unless explicitly overridden.
+
+    The smoke writes synthetic property_asset/listing/transaction rows (e.g. the
+    ``test_mml`` transactions). Running it against the production DB pollutes it —
+    which is how stray ``test_mml`` rows landed there before. Block that by default.
+    """
+    db_url = os.environ["JARVIS_PROPERTY_INTEL_DATABASE_URL"]
+    looks_like_test = "test" in db_url.lower() or db_url.startswith("sqlite")
+    if not looks_like_test and os.getenv("ALLOW_SMOKE_WRITES") != "1":
+        # Mask credentials before printing the URL back to the terminal/logs.
+        masked = re.sub(r"://([^:/@]+):[^@]*@", r"://\1:***@", db_url)
+        print(
+            "REFUSING to run: JARVIS_PROPERTY_INTEL_DATABASE_URL does not look like a\n"
+            f"test DB ({masked}). This smoke writes test rows. Point it at a throwaway\n"
+            "DB (name containing 'test'), or set ALLOW_SMOKE_WRITES=1 to override."
+        )
+        sys.exit(2)
+
+
 async def main():
     print("=" * 60)
     print("PROPERTY-INTEL INTEGRATION TEST")
     print("=" * 60)
+    _guard_target_db()
 
     passed = 0
     failed = 0

@@ -3,7 +3,7 @@
 .PHONY: help setup-fresh fetch-rates fetch-rents fetch-construction \
         fetch-migration fetch-paavo-attributes fetch-bof-loans \
         fetch-flood-risk fetch-all export pipeline-once test test-unit \
-        test-integration stats api
+        test-integration smoke-e2e stats api
 
 UV ?= uv run python
 DB_URL ?= postgresql+asyncpg://property_intel_user:changeme@localhost:5435/jarvis_property_intel
@@ -77,6 +77,9 @@ test-unit:                          ## Unit tests only
 
 test-integration:                   ## Integration tests (requires live DB)
 	uv run pytest tests/integration/ -v
+
+smoke-e2e:                          ## Live e2e smoke (hits external APIs, writes to a TEST DB)
+	uv run python tests/integration/smoke_e2e.py
 
 stats:                              ## Quick DB stats
 	@echo "TODO: update docker exec command for v2 PG container"
