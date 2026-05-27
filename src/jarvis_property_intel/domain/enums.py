@@ -33,6 +33,19 @@ class TransactionType(str, Enum):
     other = "other"
 
 
+class SaleDatePrecision(str, Enum):
+    """How precise the recorded sale_date is.
+
+    exact   = real per-transaction sale date (e.g. MML kauppapvm).
+    quarter = only the sale quarter is known (e.g. KVKL aggregate).
+    unknown = no sale date available (do NOT present ingest date as sale date).
+    """
+
+    exact = "exact"
+    quarter = "quarter"
+    unknown = "unknown"
+
+
 class MatchStatus(str, Enum):
     confirmed = "confirmed"
     rejected = "rejected"

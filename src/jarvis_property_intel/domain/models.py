@@ -13,6 +13,7 @@ from .enums import (
     ListingEventType,
     ListingStatus,
     MatchStatus,
+    SaleDatePrecision,
     TransactionType,
 )
 
@@ -72,7 +73,11 @@ class Transaction(BaseModel):
     transaction_id: UUID = Field(default_factory=uuid4)
     asset_id: UUID | None = None
     parcel_id: str | None = None
+    # Legacy: for KVKL this is the ingest date, not a sale date. Prefer sale_date.
     transaction_date: date
+    # Real sale date (None when unknown) + explicit precision.
+    sale_date: date | None = None
+    sale_date_precision: SaleDatePrecision = SaleDatePrecision.unknown
     transaction_price: float
     transaction_type: TransactionType
     source: DataSource

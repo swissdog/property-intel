@@ -1,7 +1,8 @@
 # Property Intelligence — Kauppapäivät ja EU-tason laajennus (lähdetutkimus)
 
-> Versio 1.0 | 2026-05-26 | Lähdetutkimus: oikean kauppapäivän saatavuus + EU-datalähteet & -sääntely
-> Status: tutkimus / päätöksenteon tueksi — ei vielä toteutettu
+> Versio 1.1 | 2026-05-27 | Lähdetutkimus: oikean kauppapäivän saatavuus + EU-datalähteet & -sääntely
+> Status: tutkimus / päätöksenteon tueksi. **Vaihe 1 kohta 2 toteutettu 2026-05-27**
+> (migraatio 018: `sale_date` + `sale_date_precision`); MML-konnektori odottaa OGC API:n julkaisua.
 
 ---
 
@@ -108,9 +109,14 @@ konnektorit kansallisiin avoimiin rekistereihin**, harmonisoituun skeemaan.
 ### Vaihe 1 — Suomi, kiinteistöt (lyhyt aikaväli, kevät 2026)
 1. **Integroi MML kauppahintarekisteri** (OGC API Features, julkaisu kevät 2026) uutena
    konnektorina (`connectors/mml_kauppahinta/`).
-2. **Korjaa `transaction_date`-semantiikka**: erota `sale_date` (todellinen kauppapäivä) ja
-   `ingested_at` (nykyinen ingest-leima) omiksi kentikseen + `sale_date_precision`-lippu
-   (`exact` | `quarter` | `unknown`). Päivitä detached/land-kaupat MML:n tarkalla päivällä.
+2. ✅ **TOTEUTETTU 2026-05-27 — `transaction_date`-semantiikka korjattu** (migraatio 018):
+   lisätty `sale_date` (todellinen kauppapäivä, NULL jos tuntematon) + `sale_date_precision`
+   (`exact`|`quarter`|`unknown`, CHECK-rajoite). `transaction_date` jää legacy-NOT NULL -kentäksi
+   ingest-proxynä. Backfill: KVKL-rivit (11 473) → `unknown`/NULL (ei enää esitetä ingest-päivää
+   kauppapäivänä); MML-rivit → `exact` oikealla `kauppapvm`:llä. Kirjoittaja (`hourly_pipeline.py`),
+   ORM-malli, domain-malli/-enum, API-skeema ja lukijat (transactions/properties/intelligence)
+   päivitetty surfaamaan `sale_date` + `sale_date_precision`. *Avoinna:* detached/land-kauppojen
+   päivitys MML:n tarkalla päivällä odottaa MML-konnektorin kytkemistä pipelineen (kohta 1).
 3. Liitä MML-kaupat olemassa oleviin `property_asset`-kohteisiin (kiinteistötunnus/sijainti).
 
 ### Vaihe 2 — Suomi, osakeasunnot (keskipitkä)

@@ -118,6 +118,8 @@ def _transaction_to_detail(txn: Transaction) -> TransactionDetail:
     return TransactionDetail(
         transaction_id=txn.transaction_id,
         transaction_date=txn.transaction_date,
+        sale_date=txn.sale_date,
+        sale_date_precision=txn.sale_date_precision,
         transaction_price=txn.transaction_price,
         transaction_type=txn.transaction_type,
         source=txn.source,

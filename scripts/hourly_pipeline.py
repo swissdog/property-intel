@@ -595,12 +595,14 @@ async def write_hintatiedot_to_db(
     insert_sql = text("""
         INSERT INTO property.transaction
             (transaction_id, source, source_record_id, transaction_date,
+             sale_date, sale_date_precision,
              transaction_price, transaction_type, municipality, neighborhood,
              building_type, living_area_m2, price_per_m2, year_built,
              room_config, floor, elevator, condition, lot_type,
              energy_class, fetched_at, first_seen_at)
         VALUES
             (:transaction_id, :source, :source_record_id, :transaction_date,
+             :sale_date, :sale_date_precision,
              :transaction_price, :transaction_type, :municipality, :neighborhood,
              :building_type, :living_area_m2, :price_per_m2, :year_built,
              :room_config, :floor, :elevator, :condition, :lot_type,
@@ -635,7 +637,12 @@ async def write_hintatiedot_to_db(
             "transaction_id": str(uuid.uuid4()),
             "source": "hintatiedot_kvkl",
             "source_record_id": src_id,
+            # transaction_date is a legacy NOT NULL column; KVKL gives us no real
+            # sale date, so we record the ingest date here for backward compat and
+            # flag the truth via sale_date (NULL) + sale_date_precision ('unknown').
             "transaction_date": now.date() if is_new else None,
+            "sale_date": None,
+            "sale_date_precision": "unknown",
             "transaction_price": price,
             "transaction_type": "sale",
             "municipality": d.get("city", ""),

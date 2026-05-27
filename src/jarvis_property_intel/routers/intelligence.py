@@ -601,6 +601,8 @@ async def listing_transactions(
             LIMIT 1
         )
         SELECT t.transaction_date,
+               t.sale_date,
+               t.sale_date_precision,
                t.transaction_price::float AS transaction_price,
                t.transaction_type,
                t.building_type,

@@ -81,7 +81,10 @@ class TransactionDetail(BaseModel):
     """Matched transaction record."""
 
     transaction_id: uuid.UUID
+    # Legacy: ingest date for KVKL rows. Prefer sale_date + sale_date_precision.
     transaction_date: date
+    sale_date: date | None = None
+    sale_date_precision: str = "unknown"
     transaction_price: float
     transaction_type: str
     source: str

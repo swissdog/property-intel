@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -213,7 +214,15 @@ class Transaction(Base):
         nullable=True,
     )
     parcel_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Legacy column (NOT NULL): for KVKL this holds the ingest date, not a real
+    # sale date — kept for backward compat. Canonical truth is sale_date below.
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Real sale date (NULL when unknown) + explicit precision flag so consumers
+    # never mistake the ingest date for the sale date.
+    sale_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    sale_date_precision: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="unknown"
+    )
     transaction_price: Mapped[float] = mapped_column(Float, nullable=False)
     transaction_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -228,7 +237,12 @@ class Transaction(Base):
         ),
         Index("ix_transaction_asset_id", "asset_id"),
         Index("ix_transaction_date", "transaction_date"),
+        Index("ix_transaction_sale_date", "sale_date"),
         Index("ix_transaction_parcel_id", "parcel_id"),
+        CheckConstraint(
+            "sale_date_precision IN ('exact', 'quarter', 'unknown')",
+            name="ck_transaction_sale_date_precision",
+        ),
     )
 
 

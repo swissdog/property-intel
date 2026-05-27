@@ -63,7 +63,7 @@ async def list_transactions(
         SELECT transaction_id, municipality, neighborhood, building_type,
                living_area_m2, transaction_price, price_per_m2, year_built,
                room_config, floor, elevator, condition, lot_type, energy_class,
-               transaction_date, fetched_at
+               transaction_date, sale_date, sale_date_precision, fetched_at
         FROM property.transaction
         WHERE {where}
         ORDER BY transaction_price DESC
