@@ -584,9 +584,16 @@ async def listing_transactions(
       listing -> asset -> postal_code_area.name (neighborhood)
       then transactions WHERE (municipality, neighborhood) matches.
 
-    Only 3 of 30k+ transactions carry asset_id today, so the match is by
+    Only a handful of transactions carry asset_id today, so the match is by
     municipality + neighborhood text rather than asset_id. This sees every
     listed transaction in the neighborhood, not just the same building.
+
+    Data-honesty: ``sale_date`` is the real deed date (NULL for KVKL, which has
+    none) and ``sale_date_precision`` flags it ('exact'|'quarter'|'unknown').
+    ``observed_at`` is when we ingested the row — NOT a sale date. Results are
+    ordered by real sale recency (``sale_date`` first), falling back to ingest
+    time only as a tiebreaker, so the ingest date is never presented as the
+    sale date. ``transaction_date`` is retained as a legacy alias.
     """
     sql = text(
         """
@@ -600,9 +607,10 @@ async def listing_transactions(
             WHERE l.source_listing_id = :sid
             LIMIT 1
         )
-        SELECT t.transaction_date,
-               t.sale_date,
+        SELECT t.sale_date,
                t.sale_date_precision,
+               t.fetched_at AS observed_at,
+               t.transaction_date,
                t.transaction_price::float AS transaction_price,
                t.transaction_type,
                t.building_type,
@@ -616,7 +624,7 @@ async def listing_transactions(
         FROM property.transaction t, listing_loc ll
         WHERE t.municipality = ll.municipality
           AND t.neighborhood = ll.area_name
-        ORDER BY t.transaction_date DESC
+        ORDER BY t.sale_date DESC NULLS LAST, t.fetched_at DESC
         LIMIT :n
         """
     )

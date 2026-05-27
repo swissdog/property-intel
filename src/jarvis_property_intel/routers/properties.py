@@ -308,10 +308,12 @@ async def get_property(
     sorted_listings = sorted(
         asset.listings, key=lambda l: l.last_seen_at, reverse=True
     )
-    # Sort transactions by transaction_date desc
+    # Sort transactions by real sale recency: known sale_date first (most recent
+    # first), unknown-date rows after — never let the ingest date masquerade as
+    # the sale date in ordering. Falls back to transaction_date as tiebreaker.
     sorted_txns = sorted(
         asset.transactions,
-        key=lambda t: t.transaction_date,
+        key=lambda t: (t.sale_date is not None, t.sale_date or t.transaction_date),
         reverse=True,
     )
 
