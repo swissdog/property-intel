@@ -107,8 +107,16 @@ konnektorit kansallisiin avoimiin rekistereihin**, harmonisoituun skeemaan.
 ## 4. Roadmap
 
 ### Vaihe 1 — Suomi, kiinteistöt (lyhyt aikaväli, kevät 2026)
-1. **Integroi MML kauppahintarekisteri** (OGC API Features, julkaisu kevät 2026) uutena
-   konnektorina (`connectors/mml_kauppahinta/`).
+1. 🔌 **KYTKETTY 2026-05-27 — MML-konnektori pipelineen** (`connectors/mml/` +
+   `connectors/mml/ingest.py`). `hourly_pipeline.py` hakee rullaavan ikkunan
+   (`MML_FETCH_DAYS`, oletus 30 pv) ja kirjoittaa transaktiot `source='mml_transactions'`,
+   `sale_date=kauppapvm`, `sale_date_precision='exact'`; asset-matchaus kiinteistötunnuksella
+   (`property_asset.parcel_id`, UNIQUE). **Portitettu konfiguraation taakse**: ilman
+   `MML_API_KEY`:tä lähde skipataan siististi (ei kaada pipelinea). *Aktivointi vaatii:* (a)
+   MML API-avain, (b) kauppahintarekisterin OGC-rajapinnan lopullinen host/polku vahvistettava
+   julkaisun (kevät 2026) yhteydessä — nyk. default-host `avoin-paikkatieto.maanmittauslaitos.fi`
+   (vanha `avoindata.*` ei vastaa). Kirjoituspolku verifioitu synteettisellä datalla oikeaa
+   skeemaa vasten (rollback). Yksikkötestit: `tests/unit/test_mml_pipeline.py`.
 2. ✅ **TOTEUTETTU 2026-05-27 — `transaction_date`-semantiikka korjattu** (migraatio 018):
    lisätty `sale_date` (todellinen kauppapäivä, NULL jos tuntematon) + `sale_date_precision`
    (`exact`|`quarter`|`unknown`, CHECK-rajoite). `transaction_date` jää legacy-NOT NULL -kentäksi
@@ -117,7 +125,9 @@ konnektorit kansallisiin avoimiin rekistereihin**, harmonisoituun skeemaan.
    ORM-malli, domain-malli/-enum, API-skeema ja lukijat (transactions/properties/intelligence)
    päivitetty surfaamaan `sale_date` + `sale_date_precision`. *Avoinna:* detached/land-kauppojen
    päivitys MML:n tarkalla päivällä odottaa MML-konnektorin kytkemistä pipelineen (kohta 1).
-3. Liitä MML-kaupat olemassa oleviin `property_asset`-kohteisiin (kiinteistötunnus/sijainti).
+3. 🔌 **OSITTAIN (kohdan 1 mukana):** MML-kaupat liitetään `property_asset`-kohteisiin
+   kiinteistötunnuksella (`parcel_id`-haku kirjoituksessa). *Avoinna:* sijaintipohjainen
+   matchaus (lat/lon) ja asset-rivien auto-luonti MML-datasta, jos parcel-osumaa ei ole.
 
 ### Vaihe 2 — Suomi, osakeasunnot (keskipitkä)
 1. Säilytä KVKL/hintatiedot.fi-lähde, mutta merkitse `sale_date_precision = quarter`

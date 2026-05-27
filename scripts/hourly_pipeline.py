@@ -61,6 +61,8 @@ from jarvis_property_intel.connectors.statfi import StatFiConfig, StatFiPxWebCon
 from jarvis_property_intel.connectors.paavo import PaavoConfig, PaavoConnector
 from jarvis_property_intel.connectors.oikotie import OikotieConfig, OikotieConnector
 from jarvis_property_intel.connectors.hintatiedot import HintatiedotConfig, HintatiedotConnector
+from jarvis_property_intel.connectors.mml import MMLConfig, MMLTransactionConnector
+from jarvis_property_intel.connectors.mml.ingest import record_to_transaction_params
 
 logger = logging.getLogger("property-intel.pipeline")
 
@@ -716,6 +718,131 @@ async def write_hintatiedot_to_db(
     return stats
 
 
+# ── MML kauppahintarekisteri (real property deed dates, exact precision) ──────
+MML_FETCH_DAYS = int(os.getenv("MML_FETCH_DAYS", "30"))
+
+
+def _mml_configured() -> bool:
+    """MML is wired into the pipeline but inert until an API key is provided.
+
+    The kauppahintarekisteri OGC API (kevät 2026) needs an API key plus a
+    confirmed endpoint. Without MML_API_KEY we skip MML cleanly so the hourly
+    pipeline never fails on an unconfigured source. See docs/transaction-dates-
+    and-eu-sources.md Vaihe 1 kohta 1.
+    """
+    return bool(os.getenv("MML_API_KEY", "").strip())
+
+
+async def fetch_mml(dry_run: bool = False) -> list[NormalizedRecord]:
+    """Fetch recent MML kauppahintarekisteri transactions (rolling date window).
+
+    Returns [] (logged, not raised) when MML is unconfigured or unreachable, so
+    the pipeline degrades gracefully instead of failing.
+    """
+    if not _mml_configured():
+        logger.info("MML not configured (no MML_API_KEY) — skipping MML fetch")
+        return []
+
+    connector = MMLTransactionConnector(MMLConfig())
+    try:
+        if not await connector.health_check():
+            logger.warning("MML health-check failed — skipping MML fetch")
+            return []
+        date_to = date.today()
+        date_from = date_to - timedelta(days=MML_FETCH_DAYS)
+        raws = await connector.fetch_transactions(date_from=date_from, date_to=date_to)
+        records: list[NormalizedRecord] = []
+        for raw in raws:
+            records.extend(connector.normalize(raw))
+        records = [r for r in records if r.record_type == "transaction"]
+        logger.info(
+            "MML: fetched %d transaction record(s) over last %d days",
+            len(records), MML_FETCH_DAYS,
+        )
+        return records
+    except Exception:
+        logger.exception("MML fetch failed")
+        return []
+    finally:
+        await connector.close()
+
+
+async def write_mml_to_db(
+    session: AsyncSession, records: list[NormalizedRecord], run_id: str = ""
+) -> dict[str, int]:
+    """Write MML transactions to the transaction table with exact sale dates.
+
+    Upsert on (source, source_record_id). Links each transaction to an existing
+    property_asset by parcel_id (kiinteistötunnus) when one exists; otherwise the
+    transaction is recorded unlinked (asset_id NULL) and can be matched later.
+    Returns {"written": N, "new": N, "matched": N}.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Prefetch existing MML record ids to distinguish new vs updated.
+    existing: set[str] = set()
+    try:
+        res = await session.execute(text(
+            "SELECT source_record_id FROM property.transaction WHERE source = 'mml_transactions'"
+        ))
+        existing = {row[0] for row in res.fetchall()}
+    except Exception:
+        logger.debug("Could not prefetch existing MML transactions")
+
+    insert_sql = text("""
+        INSERT INTO property.transaction
+            (transaction_id, asset_id, source, source_record_id,
+             transaction_date, sale_date, sale_date_precision,
+             transaction_price, transaction_type, parcel_id, municipality,
+             price_per_m2, fetched_at, first_seen_at)
+        VALUES
+            (:transaction_id, :asset_id, :source, :source_record_id,
+             :transaction_date, :sale_date, :sale_date_precision,
+             :transaction_price, :transaction_type, :parcel_id, :municipality,
+             :price_per_m2, :fetched_at, :first_seen_at)
+        ON CONFLICT (source, source_record_id) DO UPDATE SET
+            transaction_price = EXCLUDED.transaction_price,
+            sale_date = EXCLUDED.sale_date,
+            sale_date_precision = EXCLUDED.sale_date_precision,
+            asset_id = COALESCE(EXCLUDED.asset_id, property.transaction.asset_id),
+            price_per_m2 = EXCLUDED.price_per_m2,
+            fetched_at = EXCLUDED.fetched_at
+    """)
+
+    stats = {"written": 0, "new": 0, "matched": 0}
+    for record in records:
+        params = record_to_transaction_params(record, now)
+        if params is None:
+            continue
+
+        # Asset matching by parcel_id (kiinteistötunnus). MML covers kiinteistöt;
+        # apartment assets from Oikotie rarely carry a parcel_id, so unmatched
+        # transactions are expected early and are still recorded with the date.
+        asset_id = None
+        if params["parcel_id"]:
+            res = await session.execute(
+                text("SELECT asset_id FROM property.property_asset "
+                     "WHERE parcel_id = :pid LIMIT 1"),
+                {"pid": params["parcel_id"]},
+            )
+            row = res.first()
+            if row:
+                asset_id = row[0]
+                stats["matched"] += 1
+        params["asset_id"] = asset_id
+        params["first_seen_at"] = now
+
+        try:
+            await session.execute(insert_sql, params)
+            stats["written"] += 1
+            if params["source_record_id"] not in existing:
+                stats["new"] += 1
+        except Exception:
+            logger.debug("MML upsert failed: %s", record.source_record_id, exc_info=True)
+
+    return stats
+
+
 async def fill_missing_postal_codes(session: AsyncSession) -> int:
     """Reverse-geocode lat/lon → postal_code for any property_asset missing it.
 
@@ -874,6 +1001,11 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
     problems: list[str] = []
 
     enabled_sources = sources or ["statfi", "paavo", "oikotie", "hintatiedot"]
+    # MML is opt-in: auto-included in the default run only when configured (API
+    # key present). An explicit --sources mml still forces an attempt, which
+    # logs and no-ops cleanly if unconfigured.
+    if sources is None and _mml_configured() and "mml" not in enabled_sources:
+        enabled_sources.append("mml")
 
     # Log pipeline start. Also sweep stale 'running' rows from prior crashed
     # runs (the cron triggers hourly; nothing healthy stays running >2h).
@@ -912,10 +1044,13 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
         tasks["statfi"] = asyncio.create_task(fetch_statfi(dry_run))
     if "paavo" in enabled_sources:
         tasks["paavo"] = asyncio.create_task(fetch_paavo(dry_run))
+    if "mml" in enabled_sources:
+        tasks["mml"] = asyncio.create_task(fetch_mml(dry_run))
 
     statfi_records: list[NormalizedRecord] = []
     paavo_records: list[NormalizedRecord] = []
     oikotie_records: list[NormalizedRecord] = []
+    mml_records: list[NormalizedRecord] = []
 
     if "statfi" in tasks:
         statfi_records = await tasks["statfi"]
@@ -927,6 +1062,9 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
         results["paavo_fetched"] = len(paavo_records)
         if not paavo_records:
             problems.append("Paavo returned 0 records")
+    if "mml" in tasks:
+        mml_records = await tasks["mml"]
+        results["mml_fetched"] = len(mml_records)
 
     # Oikotie runs after stats sources (rate-limited, sequential)
     oikotie_fetched_cities: set[str] = set()
@@ -1040,6 +1178,23 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
             except Exception as e:
                 problems.append(f"Hintatiedot failed: {e}")
                 logger.exception("Hintatiedot pipeline failed")
+
+        # MML kauppahintarekisteri transactions (real deed dates, precision=exact).
+        if "mml" in enabled_sources and mml_records:
+            try:
+                async with SessionFactory() as session:
+                    mml_stats = await write_mml_to_db(session, mml_records, run_id=run_id)
+                    await session.commit()
+                    results["mml_written"] = mml_stats["written"]
+                    results["mml_new"] = mml_stats["new"]
+                    results["mml_matched"] = mml_stats["matched"]
+                    logger.info(
+                        "MML DB: %d written (%d new, %d asset-matched)",
+                        mml_stats["written"], mml_stats["new"], mml_stats["matched"],
+                    )
+            except Exception as e:
+                problems.append(f"MML DB write failed: {e}")
+                logger.exception("MML DB write failed")
 
         # Reverse-geocode any property_asset rows missing postal_code (lat/lon → postal_code).
         # Runs before view refresh so market_velocity_by_postal_code aggregations stay correct.
