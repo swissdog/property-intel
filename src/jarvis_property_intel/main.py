@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
         health,
         intelligence,
         properties,
+        runs,
         transactions,
     )
 
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(transactions.router)
     app.include_router(analytics.router)
     app.include_router(intelligence.router)
+    app.include_router(runs.router)
     return app
 
 

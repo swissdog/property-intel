@@ -21,6 +21,10 @@ routes:
     methods: ["GET"]
   - path: "/api/v1/property_intel/intel/*"
     methods: ["GET"]
+  - path: "/api/v1/property_intel/runs"
+    methods: ["GET"]
+  - path: "/api/v1/property_intel/runs/*"
+    methods: ["GET"]
 
 chat_tools:
   - name: property_intel.search_listings

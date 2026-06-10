@@ -1304,7 +1304,8 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
                     records_written = :written,
                     records_changed = :changed,
                     problems_json = :problems,
-                    elapsed_seconds = :elapsed
+                    elapsed_seconds = :elapsed,
+                    results_json = :results_json
                 WHERE run_id = :run_id
             """), {
                 "run_id": run_id,
@@ -1315,6 +1316,7 @@ async def run_pipeline(sources: list[str] | None = None, dry_run: bool = False) 
                 "changed": results.get("hintatiedot_changed", 0) + results.get("oikotie_price_changes", 0),
                 "problems": json.dumps(problems) if problems else None,
                 "elapsed": elapsed_total,
+                "results_json": json.dumps(results, default=str),
             })
             await session.commit()
         await _track_engine.dispose()
