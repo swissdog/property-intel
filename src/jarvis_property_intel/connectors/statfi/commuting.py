@@ -109,16 +109,16 @@ CODE_TO_NAME: dict[str, str] = {v: k for k, v in MUNICIPALITY_CODES.items()}
 _BASE_URL = "https://pxdata.stat.fi/PXWeb/api/v1/en/StatFin/tyokay"
 
 # 115n: employed by residence area + commuting status
-_TABLE_RESIDENCE = "statfin_tyokay_pxt_115n.px"
+_TABLE_RESIDENCE = "115n.px"
 
 # 115p: employed labour force by workplace area + commuting status
-_TABLE_WORKPLACE = "statfin_tyokay_pxt_115p.px"
+_TABLE_WORKPLACE = "115p.px"
 
 # 125s: workplace self-sufficiency (%)
-_TABLE_SELFSUFF = "statfin_tyokay_pxt_125s.px"
+_TABLE_SELFSUFF = "125s.px"
 
 # 115x: key employment indicators
-_TABLE_INDICATORS = "statfin_tyokay_pxt_115x.px"
+_TABLE_INDICATORS = "115x.px"
 
 
 # ---------------------------------------------------------------------------

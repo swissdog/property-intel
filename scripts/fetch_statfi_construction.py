@@ -37,7 +37,7 @@ DB_URL = os.getenv(
     "postgresql+asyncpg://property:property_dev@localhost:5433/property_intel",
 )
 
-PXWEB_TABLE = "https://pxdata.stat.fi/PXWeb/api/v1/fi/StatFin/raku/statfin_raku_pxt_156f.px"
+PXWEB_TABLE = "https://pxdata.stat.fi/PXWeb/api/v1/fi/StatFin/raku/156f.px"
 
 PHASE_LABEL = {"1": "permit", "2": "start", "3": "completion"}
 
@@ -56,7 +56,7 @@ async def _published_months() -> set[str] | None:
         logger.warning("Could not probe StatFi 156f metadata for valid months")
         return None
     for v in meta.get("variables", []):
-        if v.get("code") == "timeperiod":
+        if v.get("code") == "timeperiod_m":
             return set(v.get("values", []))
     return None
 
@@ -190,12 +190,14 @@ async def main() -> int:
                         batch[0], batch[-1])
             query = {
                 "query": [
-                    {"code": "rakennusvaihe",        "selection": {"filter": "item", "values": [phase]}},
-                    {"code": "alue",                  "selection": {"filter": "all", "values": ["*"]}},
-                    {"code": "timeperiod",            "selection": {"filter": "item", "values": batch}},
-                    {"code": "rakennusluokitus2018",  "selection": {"filter": "all", "values": ["*"]}},
-                    {"code": "ContentCode", "selection": {"filter": "item", "values": [
-                        "tilavuusToimenpide", "kerrosalaToimenpide", "uusiAsuntoLkm", "rakentamistoimenpideLkm",
+                    # PxWeb-päivitys 2026-06-08: dimensiokoodit teknisiin id:ihin,
+                    # contentscode-arvot "raku-"-etuliitteellä (stripataan parsinnassa).
+                    {"code": "rakennusvaihe_1_20250101", "selection": {"filter": "item", "values": [phase]}},
+                    {"code": "alue_23_20260101",         "selection": {"filter": "all", "values": ["*"]}},
+                    {"code": "timeperiod_m",             "selection": {"filter": "item", "values": batch}},
+                    {"code": "rakennus_6_20180101",      "selection": {"filter": "all", "values": ["*"]}},
+                    {"code": "contentscode", "selection": {"filter": "item", "values": [
+                        "raku-tilavuusToimenpide", "raku-kerrosalaToimenpide", "raku-uusiAsuntoLkm", "raku-rakentamistoimenpideLkm",
                     ]}},
                 ],
                 "response": {"format": "json-stat2"},
@@ -208,11 +210,11 @@ async def main() -> int:
             # Group cells with the same dimensions but different ContentCode
             grouped: dict[tuple, dict] = {}
             for r in rows:
-                phase = r.get("rakennusvaihe", "")
-                region = r.get("alue", "")
-                period = r.get("timeperiod", "")
-                bclass = r.get("rakennusluokitus2018", "")
-                content = r.get("ContentCode", "")
+                phase = r.get("rakennusvaihe_1_20250101", r.get("rakennusvaihe", ""))
+                region = r.get("alue_23_20260101", r.get("alue", ""))
+                period = r.get("timeperiod_m", r.get("timeperiod", ""))
+                bclass = r.get("rakennus_6_20180101", r.get("rakennusluokitus2018", ""))
+                content = r.get("contentscode", r.get("ContentCode", "")).removeprefix("raku-")
                 if not (phase and region and period and bclass and content):
                     continue
                 key = (region, period, phase, bclass)

@@ -181,8 +181,11 @@ async def fetch_statfi(dry_run: bool = False) -> list[NormalizedRecord]:
             dataset_id="apartment_prices",
             query={
                 "query": [
-                    {"code": "Vuosineljännes", "selection": {"filter": "item", "values": quarters}},
-                    {"code": "Talotyyppi", "selection": {"filter": "item", "values": ["1", "2", "3", "5"]}},
+                    # PxWeb-päivitys 2026-06-08: dimensiokoodit vaihtuivat
+                    # teknisiin id:ihin (Vuosineljännes→timeperiod_q,
+                    # Talotyyppi→talotyyppi_6_20131021); arvot ennallaan.
+                    {"code": "timeperiod_q", "selection": {"filter": "item", "values": quarters}},
+                    {"code": "talotyyppi_6_20131021", "selection": {"filter": "item", "values": ["1", "2", "3", "5"]}},
                 ],
                 "response": {"format": "json-stat2"},
             },
@@ -243,10 +246,16 @@ async def write_statfi_to_db(
         if record.record_type != "area_stats":
             continue
         d = record.data
-        quarter_str = d.get("Vuosineljännes", "")
-        postal_code = d.get("Postinumero", "00000")
-        building_type = d.get("Talotyyppi_label", d.get("Talotyyppi", ""))
-        measure = d.get("Tiedot", "")
+        # Avaimet ovat JSON-stat2-vastauksen dimensio-id:itä. PxWeb-päivitys
+        # 2026-06-08 vaihtoi ne teknisiin koodeihin; vanhat nimet fallbackina.
+        quarter_str = d.get("timeperiod_q", d.get("Vuosineljännes", ""))
+        postal_code = d.get("postinumeroalue_4_20220101", d.get("Postinumero", "00000"))
+        building_type = (
+            d.get("talotyyppi_6_20131021_label")
+            or d.get("Talotyyppi_label")
+            or d.get("talotyyppi_6_20131021", d.get("Talotyyppi", ""))
+        )
+        measure = d.get("contentscode", d.get("Tiedot", ""))
         value = d.get("value")
 
         if not quarter_str or "Q" not in quarter_str:
@@ -349,10 +358,10 @@ async def fetch_oikotie(dry_run: bool = False) -> tuple[list[NormalizedRecord], 
         healthy = await connector.health_check()
         if not healthy:
             logger.warning("Oikotie: health check failed (token acquisition), skipping")
-            return []
+            return [], set()
     except Exception as e:
         logger.error("Oikotie: health check error: %s", e)
-        return []
+        return [], set()
 
     all_records: list[NormalizedRecord] = []
 
@@ -374,7 +383,10 @@ async def fetch_oikotie(dry_run: bool = False) -> tuple[list[NormalizedRecord], 
             for raw in results:
                 records = connector.normalize(raw)
                 all_records.extend(records)
-            fetched_cities.add(city)
+            # loc[2] = virallinen kuntanimi ("Helsinki"); avain (city) on
+            # pieneksi kirjoitettu slug joka EI täsmää property_asset.
+            # municipality-arvoon → stale-merkintä ei osuisi koskaan.
+            fetched_cities.add(loc[2])
             logger.info("Oikotie: %s → %d pages", city, len(results))
         except Exception as e:
             logger.error("Oikotie: fetch failed for %s: %s", city, e)
@@ -568,6 +580,24 @@ async def write_hintatiedot_to_db(
     Returns {"written": N, "new": N, "updated": N, "changed": N}.
     """
     now = datetime.now(timezone.utc)
+
+    # source_record_id-hash ei sisällä hintaa (tietoinen valinta: hintakorjaus
+    # ei saa luoda duplikaattia), joten samanspeksiset eri kaupat törmäävät
+    # samaan id:hen ja ylikirjoittaisivat toisiaan joka ajossa (flip-flop,
+    # ~24 riviä). Dedupataan batchin sisällä deterministisesti: korkein hinta
+    # voittaa, jolloin sama rivi säilyy ajosta toiseen eikä turhia
+    # transaction_history-rivejä synny.
+    unique: dict[str, NormalizedRecord] = {}
+    for r in records:
+        prev = unique.get(r.source_record_id)
+        if prev is None or (r.data.get("debt_free_price") or 0) > (prev.data.get("debt_free_price") or 0):
+            unique[r.source_record_id] = r
+    if len(unique) < len(records):
+        logger.info(
+            "Hintatiedot: deduped %d colliding record(s) within batch",
+            len(records) - len(unique),
+        )
+    records = list(unique.values())
 
     # Check if history table exists (graceful fallback if migration not yet run)
     has_history = False

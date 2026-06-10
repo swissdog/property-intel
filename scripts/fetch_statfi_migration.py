@@ -33,12 +33,16 @@ DB_URL = os.getenv(
     "postgresql+asyncpg://property:property_dev@localhost:5433/property_intel",
 )
 
-PXWEB_TABLE = "https://pxdata.stat.fi/PXWeb/api/v1/fi/StatFin/muutl/statfin_muutl_pxt_11ae.px"
+PXWEB_TABLE = "https://pxdata.stat.fi/PXWeb/api/v1/fi/StatFin/muutl/11ae.px"
 
+# PxWeb-päivitys 2026-06-08: contentscode-arvot saivat "muutl-"-etuliitteen;
+# parsinnassa etuliite stripataan jotta upsert-avaimet säilyvät ennallaan.
 MEASURES = [
-    "vaesto", "valisays", "luonvalisays",
-    "vm43_tulo", "vm43_lahto", "vm43_netto",
-    "vm41", "vm42", "vm4142", "koknetmuutto",
+    "muutl-" + m for m in (
+        "vaesto", "valisays", "luonvalisays",
+        "vm43_tulo", "vm43_lahto", "vm43_netto",
+        "vm41", "vm42", "vm4142", "koknetmuutto",
+    )
 ]
 
 
@@ -73,10 +77,15 @@ def _decode_jsonstat(data: dict) -> list[dict]:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--from", dest="from_year", type=int, default=2015)
-    parser.add_argument("--to", dest="to_year", type=int, default=2024)
+    # Oletus: edellinen kalenterivuosi. StatFi julkaisee vuoden N lopulliset
+    # väestönmuutokset ~kesällä N+1; skip-existing hoitaa turhat kyselyt
+    # kunnes data ilmestyy. (Kiinteä default=2024 jätti 2025:n hakematta.)
+    parser.add_argument("--to", dest="to_year", type=int, default=None)
     parser.add_argument("--force-full", action="store_true",
                         help="Refetch all years even if already in DB")
     args = parser.parse_args()
+    if args.to_year is None:
+        args.to_year = date.today().year - 1
 
     logging.basicConfig(level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -136,9 +145,9 @@ async def main() -> int:
             logger.info("Years %s..%s", batch[0], batch[-1])
             query = {
                 "query": [
-                    {"code": "Vuosi",  "selection": {"filter": "item", "values": batch}},
-                    {"code": "Alue",    "selection": {"filter": "all", "values": ["*"]}},
-                    {"code": "Tiedot",  "selection": {"filter": "item", "values": MEASURES}},
+                    {"code": "timeperiod_y", "selection": {"filter": "item", "values": batch}},
+                    {"code": "alue_23_20260101", "selection": {"filter": "all", "values": ["*"]}},
+                    {"code": "contentscode", "selection": {"filter": "item", "values": MEASURES}},
                 ],
                 "response": {"format": "json-stat2"},
             }
@@ -158,9 +167,9 @@ async def main() -> int:
 
             grouped: dict[tuple[str, str], dict] = {}
             for r in rows:
-                code = r.get("Alue", "")
-                yr = r.get("Vuosi", "")
-                measure = r.get("Tiedot", "")
+                code = r.get("alue_23_20260101", r.get("Alue", ""))
+                yr = r.get("timeperiod_y", r.get("Vuosi", ""))
+                measure = r.get("contentscode", r.get("Tiedot", "")).removeprefix("muutl-")
                 if not code or not yr or not measure:
                     continue
                 grouped.setdefault((code, yr), {})[measure] = r["value"]

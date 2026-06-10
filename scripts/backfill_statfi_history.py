@@ -65,7 +65,7 @@ async def _published_quarters(config: StatFiConfig) -> set[str] | None:
         logger.warning("Could not probe StatFi metadata for valid quarters")
         return None
     for v in meta.get("variables", []):
-        if v.get("code") == "Vuosineljännes":
+        if v.get("code") == "timeperiod_q":
             return set(v.get("values", []))
     return None
 
@@ -127,11 +127,11 @@ async def main() -> int:
                     query={
                         "query": [
                             {
-                                "code": "Vuosineljännes",
+                                "code": "timeperiod_q",
                                 "selection": {"filter": "item", "values": batch},
                             },
                             {
-                                "code": "Talotyyppi",
+                                "code": "talotyyppi_6_20131021",
                                 "selection": {"filter": "item", "values": ["1", "2", "3", "5"]},
                             },
                         ],

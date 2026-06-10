@@ -37,12 +37,16 @@ class StatFiConfig:
     # Pre-configured table paths -----------------------------------------
     # Tables were renamed in 2024: 112p→13mt, 112q→13mp, 112r→13ms
     # Path structure changed from StatFin/asu/ashi/<sub>/ to StatFin/ashi/
+    # 2026-06-08: PxWeb dropped the long "statfin_ashi_pxt_" id form in the
+    # active StatFin database (long form → 400); only the short "<id>.px"
+    # works. NOTE: StatFin_Passiivi archive tables still REQUIRE the long
+    # "statfinpas_*" form — this change applies to active StatFin only.
     apartment_prices_table: str = (
-        "StatFin/ashi/statfin_ashi_pxt_13mt.px"
+        "StatFin/ashi/13mt.px"
     )
     price_index_table: str = (
-        "StatFin/ashi/statfin_ashi_pxt_13mp.px"
+        "StatFin/ashi/13mp.px"
     )
     monthly_index_table: str = (
-        "StatFin/ashi/statfin_ashi_pxt_13ms.px"
+        "StatFin/ashi/13ms.px"
     )

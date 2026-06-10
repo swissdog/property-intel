@@ -279,9 +279,12 @@ class StatFiPxWebConnector:
         years: list[str] | None = params.get("years")
         building_types: list[str] | None = params.get("building_types")
 
+        # PxWeb-päivitys 2026-06-08: dimensiokoodit ovat teknisiä id:itä
+        # (ashi-taulujen 13mt/13mp/13ms koodit alla); vanhat suomenkieliset
+        # nimet eivät enää kelpaa aktiivisessa StatFin-kannassa.
         if postal_codes:
             query_items.append({
-                "code": "Postinumero",
+                "code": "postinumeroalue_4_20220101",
                 "selection": {
                     "filter": "item",
                     "values": postal_codes,
@@ -289,7 +292,7 @@ class StatFiPxWebConnector:
             })
         if quarters:
             query_items.append({
-                "code": "Vuosineljännes",
+                "code": "timeperiod_q",
                 "selection": {
                     "filter": "item",
                     "values": quarters,
@@ -297,7 +300,7 @@ class StatFiPxWebConnector:
             })
         if years:
             query_items.append({
-                "code": "Vuosi",
+                "code": "timeperiod_y",
                 "selection": {
                     "filter": "item",
                     "values": years,
@@ -305,7 +308,7 @@ class StatFiPxWebConnector:
             })
         if building_types:
             query_items.append({
-                "code": "Talotyyppi",
+                "code": "talotyyppi_6_20131021",
                 "selection": {
                     "filter": "item",
                     "values": building_types,
@@ -315,7 +318,7 @@ class StatFiPxWebConnector:
         # If no specific filters, request a small default slice
         if not query_items:
             query_items.append({
-                "code": "Vuosineljännes",
+                "code": "timeperiod_q",
                 "selection": {
                     "filter": "top",
                     "values": ["4"],

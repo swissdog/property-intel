@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from datetime import date, timedelta
 
@@ -37,7 +38,23 @@ DB_URL = os.getenv(
 )
 
 PXWEB_BASE = "https://pxdata.stat.fi/PXWeb/api/v1/fi"
+# HUOM: Passiivi-arkisto käyttää yhä VANHAA PxWeb-muotoa (pitkä taulu-id +
+# suomenkieliset dimensiokoodit) — aktiivinen StatFin siirtyi 2026-06-08
+# lyhyisiin id:ihin ja teknisiin dimensiokoodeihin. Älä "korjaa" tätä.
 HISTORICAL_TABLE = "StatFin_Passiivi/asvu/statfinpas_asvu_pxt_13eb_2025q4.px"
+
+# Nykytaulu (2025=100-pohjainen vuokratilasto): VAIN kunta/aluetaso —
+# postinumerotason sarja (13eb) päättyi pysyvästi 2025Q4:ään. Rivit
+# tallennetaan rent_snapshotiin alue-koodilla postal_code-sarakkeessa
+# ('SSS' = koko maa, '091' = Helsinki jne.) ja source-markkerilla, jotta
+# kuntataso ei sekoitu postinumerotasoon (eivät osu 5-numeroisiin joineihin).
+CURRENT_TABLE = "StatFin/asvu/15fa.px"
+CURRENT_SOURCE = "statfi_asvu_15fa"
+# Jatkuvuus 13eb:n kanssa: vain vapaarahoitteiset (rahoitus=1).
+CURRENT_RAHOITUS = "1"
+CURRENT_ROOM_BAND = {"1": "1h", "2": "2h", "3": "3h+"}
+# Kuntakoodit (3 numeroa) + koko maa; pois pks/msu/maakunnat/Helsingin osa-alueet
+_CURRENT_AREA_RE = re.compile(r"^(\d{3}|SSS)$")
 
 # Map StatFi room_count code → our band label
 ROOM_BAND = {"01": "1h", "02": "2h", "03": "3h+"}
@@ -222,6 +239,124 @@ async def write_rent_rows(rows: list[dict], dry_run: bool) -> int:
     return written
 
 
+async def _existing_current_quarters(engine) -> set[str]:
+    """Quarters already fetched from the current (15fa) table."""
+    async with engine.connect() as conn:
+        result = await conn.execute(text(
+            "SELECT DISTINCT EXTRACT(YEAR FROM period_start)::int*10 "
+            "+ EXTRACT(QUARTER FROM period_start)::int "
+            "FROM property.rent_snapshot WHERE source = :src"
+        ), {"src": CURRENT_SOURCE})
+        return {f"{int(r[0])//10}Q{int(r[0])%10}" for r in result.fetchall()}
+
+
+async def _current_available_quarters(client: httpx.AsyncClient) -> list[str]:
+    """Probe 15fa metadata for published quarters."""
+    resp = await client.get(f"{PXWEB_BASE}/{CURRENT_TABLE}", timeout=30)
+    resp.raise_for_status()
+    for v in resp.json().get("variables", []):
+        if v.get("code") == "timeperiod_q":
+            return v.get("values", [])
+    return []
+
+
+async def fetch_and_write_current(
+    client: httpx.AsyncClient, dry_run: bool, force_full: bool = False
+) -> int:
+    """Fetch kunta/koko maa -level rent quarters from the 15fa table.
+
+    Returns the number of rent_snapshot rows upserted.
+    """
+    engine = create_async_engine(DB_URL, future=True)
+    try:
+        already = set() if force_full else await _existing_current_quarters(engine)
+    finally:
+        await engine.dispose()
+
+    try:
+        available = await _current_available_quarters(client)
+    except Exception as e:
+        logger.error("Current-lane (15fa): metadata probe failed: %s", e)
+        return 0
+
+    quarters = [q for q in available if q not in already]
+    if not quarters:
+        logger.info("Current-lane (15fa): all %d quarters already cached", len(available))
+        return 0
+    logger.info("Current-lane (15fa): fetching %d quarter(s): %s", len(quarters), quarters)
+
+    grouped: dict[tuple[str, str, str], dict] = {}
+    for q in quarters:
+        query = {
+            "query": [
+                {"code": "timeperiod_q", "selection": {"filter": "item", "values": [q]}},
+                {"code": "alue_44_20260101", "selection": {"filter": "all", "values": ["*"]}},
+                {"code": "rahoitus_2_20260101", "selection": {"filter": "item", "values": [CURRENT_RAHOITUS]}},
+                {"code": "huoneluku_5_20260101", "selection": {"filter": "item", "values": ["1", "2", "3"]}},
+                {"code": "contentscode", "selection": {"filter": "item", "values": [
+                    "asvu_keskineliovuokra", "asvu_keskineliovuokra_lkm",
+                ]}},
+            ],
+            "response": {"format": "json-stat2"},
+        }
+        data = await _fetch_pxweb(client, CURRENT_TABLE, query)
+        if not data:
+            logger.warning("Quarter %s (15fa): fetch failed, skipping", q)
+            continue
+        for r in _decode_jsonstat(data):
+            area = str(r.get("alue_44_20260101", ""))
+            rc = str(r.get("huoneluku_5_20260101", ""))
+            qq = str(r.get("timeperiod_q", ""))
+            if not _CURRENT_AREA_RE.match(area) or rc not in CURRENT_ROOM_BAND or not qq:
+                continue
+            slot = grouped.setdefault((area, qq, rc), {})
+            measure = r.get("contentscode", "")
+            if measure == "asvu_keskineliovuokra":
+                slot["rent"] = r["value"]
+            elif measure == "asvu_keskineliovuokra_lkm":
+                slot["count"] = r["value"]
+        await asyncio.sleep(0.7)
+
+    if dry_run:
+        logger.info("DRY: would upsert %d city-level rent_snapshot rows", len(grouped))
+        return 0
+    if not grouped:
+        return 0
+
+    engine = create_async_engine(DB_URL, future=True)
+    upsert_sql = text(
+        """
+        INSERT INTO property.rent_snapshot
+            (postal_code, period_start, period_end, room_count_band,
+             median_rent_per_m2, rental_contract_count, source, fetched_at)
+        VALUES (:postal_code, :period_start, :period_end, :room_count_band,
+                :rent, :count, :source, now())
+        ON CONFLICT (postal_code, period_start, period_end, room_count_band)
+        DO UPDATE SET
+            median_rent_per_m2     = EXCLUDED.median_rent_per_m2,
+            rental_contract_count  = EXCLUDED.rental_contract_count,
+            source                 = EXCLUDED.source,
+            fetched_at             = EXCLUDED.fetched_at
+        """
+    )
+    written = 0
+    async with engine.begin() as conn:
+        for (area, q, rc), slot in grouped.items():
+            ps, pe = _quarter_to_dates(q)
+            await conn.execute(upsert_sql, {
+                "postal_code": area,
+                "period_start": ps,
+                "period_end": pe,
+                "room_count_band": CURRENT_ROOM_BAND[rc],
+                "rent": slot.get("rent"),
+                "count": int(slot["count"]) if slot.get("count") else None,
+                "source": CURRENT_SOURCE,
+            })
+            written += 1
+    await engine.dispose()
+    return written
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
@@ -236,12 +371,10 @@ async def main() -> int:
 
     async with httpx.AsyncClient() as client:
         rows = await fetch_historical(client, force_full=args.force_full)
-    if not rows:
-        logger.info("No new quarters fetched (DB already up to date)")
-        return 0
+        written_hist = await write_rent_rows(rows, args.dry_run) if rows else 0
+        written_cur = await fetch_and_write_current(client, args.dry_run, args.force_full)
 
-    written = await write_rent_rows(rows, args.dry_run)
-    logger.info("Done: %d rows written", written)
+    logger.info("Done: %d historical + %d current (15fa) rows written", written_hist, written_cur)
     return 0
 
 
