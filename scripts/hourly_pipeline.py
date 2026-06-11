@@ -139,6 +139,11 @@ def _recent_quarters(n: int = STATFI_QUARTERS_BACK) -> list[str]:
     StatFi publishes housing data with ~2–3 quarter lag. For Q2 2026 (Apr),
     the latest available data is typically Q4 2025 or Q3 2025.
     We go back 3 quarters from the current quarter to be safe.
+
+    HUOM: vain fallback. Ensisijaisesti neljännekset luetaan taulun
+    metadatasta (_published_recent_quarters) — kiinteä currentQ-3-ikkuna
+    laahasi pysyvästi 2 neljännestä julkaisuja jäljessä (2025Q4/2026Q1
+    puuttuivat kannasta kesäkuussa 2026 vaikka olivat julkaistuja).
     """
     today = date.today()
     y, q = today.year, (today.month - 1) // 3 + 1
@@ -160,6 +165,29 @@ def _recent_quarters(n: int = STATFI_QUARTERS_BACK) -> list[str]:
     return list(reversed(quarters))
 
 
+async def _published_recent_quarters(
+    connector: "StatFiPxWebConnector", n: int = STATFI_QUARTERS_BACK
+) -> list[str] | None:
+    """Last N published quarters straight from the 13mt table metadata.
+
+    Seuraa julkaisuja täsmälleen (myös tähdelliset ennakkotiedot, jotka
+    revisoituvat — upsert päivittää ne joka ajossa). None jos probe
+    epäonnistuu → kutsuja fallbackaa _recent_quarters()-päivämatikkaan.
+    """
+    try:
+        client = await connector._get_client()
+        url = f"{connector._config.base_url}/{connector._config.apartment_prices_table}"
+        resp = await client.get(url)
+        resp.raise_for_status()
+        for v in resp.json().get("variables", []):
+            if v.get("code") == "timeperiod_q":
+                vals = v.get("values", [])
+                return vals[-n:] if vals else None
+    except Exception as e:
+        logger.warning("StatFi: quarter probe failed (%s), using date-math fallback", e)
+    return None
+
+
 async def fetch_statfi(dry_run: bool = False) -> list[NormalizedRecord]:
     """Fetch apartment price data from Tilastokeskus PxWeb."""
     logger.info("StatFi: starting fetch")
@@ -173,7 +201,7 @@ async def fetch_statfi(dry_run: bool = False) -> list[NormalizedRecord]:
         logger.error("StatFi: health check error: %s", e)
         return []
 
-    quarters = _recent_quarters()
+    quarters = await _published_recent_quarters(connector) or _recent_quarters()
     logger.info("StatFi: fetching quarters %s", quarters)
 
     try:
